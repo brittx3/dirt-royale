@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nature Studio: Showdown</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { 
+            --ui-bg: rgba(20, 20, 20, 0.9);
+            --ui-border: #444;
+            --accent: #2e7d32;
+            --text: #eee;
+        }
+        body { 
+            margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; 
+            background: #1a1a1a; color: var(--text); user-select: none;
+        }
+        #hud {
+            position: absolute; top: 20px; left: 20px; width: 280px;
+            background: var(--ui-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--ui-border); border-radius: 12px;
+            padding: 20px; z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        #game-stats {
+            position: absolute; top: 20px; left: 320px; right: 20px; 
+            display: flex; justify-content: space-between; align-items: center;
+            font-family: 'Courier New', Courier, monospace; z-index: 90;
+            pointer-events: none;
+        }
+        .hp-bar { font-size: 20px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; }
+        #countdown-timer { font-size: 48px; color: #ffd54f; text-shadow: 0 0 10px rgba(255,213,79,0.5); }
+        
+        /* Respawn Button Style */
+        #respawn-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 200; display: none; text-align: center;
+        }
+        .respawn-btn {
+            background: #d32f2f; color: white; border: none; padding: 20px 40px;
+            font-size: 24px; font-weight: bold; border-radius: 12px; cursor: pointer;
+            box-shadow: 0 0 20px rgba(211, 47, 47, 0.6);
+        }
+        .respawn-btn:hover { background: #ff5252; }
+
+        .section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #888; margin-bottom: 10px; display: block; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 15px; }
+        .id-container { background: #111; border: 1px solid #444; border-radius: 6px; padding: 8px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        #my-id-display { font-family: monospace; font-size: 12px; color: #4caf50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .copy-btn { background: #444; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer; }
+        .btn { background: #333; border: 1px solid var(--ui-border); color: white; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 11px; transition: all 0.2s ease; }
+        .btn:hover { background: #444; }
+        .btn.active { background: var(--accent); border-color: #4caf50; }
+        .connection-panel { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #333; }
+        #peer-id-input { background: #111; border: 1px solid #444; color: white; padding: 8px; border-radius: 6px; width: 60%; font-size: 11px; }
+        canvas { display: block; background: #1e3c72; cursor: crosshair; }
+        .connected-status { color: #4caf50; font-size: 10px; margin-top: 5px; display: none; }
+        .char-select { display: flex; gap: 10px; margin-bottom: 15px; }
+        .char-btn { flex: 1; font-size: 20px; padding: 10px; background: #222; border: 2px solid #444; border-radius: 10px; cursor: pointer; color: white; }
+        .char-btn.selected { border-color: #ffd54f; background: #333; }
+    </style>
+</head>
+<body>
+
+<div id="game-stats">
+    <div id="p1-health" class="hp-bar">🐱 ❤️x10</div>
+    <div id="countdown-timer"></div>
+    <div id="p2-health" class="hp-bar">🐶 ❤️x10</div>
+</div>
+
+<div id="respawn-overlay">
+    <button class="respawn-btn" onclick="respawnPlayer()">RESPAWN</button>
+</div>
+
+<div id="hud">
+    <div class="connection-panel">
+        <span class="section-label">Your Connection ID</span>
+        <div class="id-container">
+            <span id="my-id-display">Generating...</span>
+            <button class="copy-btn" onclick="copyMyId()">COPY</button>
+        </div>
+        
+        <span class="section-label">Link to Andrey</span>
+        <div style="display:flex; gap:5px;">
+            <input type="text" id="peer-id-input" placeholder="Paste Andrey's ID">
+            <button class="btn" onclick="connectToPeer()" style="flex:1">LINK</button>
+        </div>
+        <div id="conn-success" class="connected-status">✓ Connected to Partner</div>
+    </div>
+
+    <span class="section-label">Choose Your Character</span>
+    <div class="char-select">
+        <button class="char-btn" id="btn-cat" onclick="selectChar('🐱')">🐱</button>
+        <button class="char-btn" id="btn-dog" onclick="selectChar('🐶')">🐶</button>
+    </div>
+
+    <span class="section-label">Toolbox</span>
+    <div class="grid-3" style="grid-template-columns: 1fr 1fr; margin-bottom: 10px;">
+        <button id="pourBtn" class="btn active" onclick="setTool('pour')">POUR</button>
+        <button id="digBtn" class="btn" onclick="setTool('dig')">SHOVEL</button>
+    </div>
+    <button class="btn" style="width:100%; margin-bottom: 20px; background: #d32f2f;" onclick="startShowdown()">🔥 START SHOWDOWN</button>
+
+    <span class="section-label">Materials</span>
+    <div class="grid-3">
+        <button class="btn" onclick="setElement('earth')" style="border-left: 4px solid #8d6e63">Earth</button>
+        <button class="btn" onclick="setElement('mountain')" style="border-left: 4px solid #90a4ae">Stone</button>
+        <button class="btn" onclick="setElement('water')" style="border-left: 4px solid #0288d1">Water</button>
+        <button class="btn" onclick="setElement('sand')" style="border-left: 4px solid #ffd54f">Sand</button>
+        <button class="btn" onclick="setElement('lava')" style="border-left: 4px solid #ff7043">Lava</button>
+        <button class="btn" onclick="setElement('fire')" style="border-left: 4px solid #ff5722">Fire</button>
+    </div>
+
+    <span class="section-label">Simulation</span>
+    <button class="btn" style="width:100%; margin-bottom:8px;" onclick="toggleBirds()">TOGGLE BIRD AI</button>
+    <button class="btn" style="width:100%; background:#444" onclick="resetCanvas()">PURGE WORLD</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const colors = {
+        earth: ['#5d4037', '#8d6e63'], wood: ['#3e2723', '#4e342e'],
+        mountain: ['#455a64', '#78909c'], water: ['#01579b', '#0288d1'],
+        sand: ['#ff8f00', '#ffc107'], lava: ['#bf360c', '#e64a19'],
+        fire: ['#ff5722', '#ffeb3b']
+    };
+
+    let width = 180, grid, cellSize, height, smoke = [];
+    let currentElement = 'water', currentTool = 'pour', peer, conn, myId = "";
+    
+    let bullets = [];
+    let gunPickup = { x: -100, y: -100, active: false };
+    let gamePhase = 'waiting';
+
+    let player = { x: 100, y: 100, vx: 0, vy: 0, char: '🐱', jumps: 0, w: 20, h: 20, isMoving: false, hp: 10, hasGun: false, dir: 1 };
+    let partner = { x: -100, y: -100, char: '🐶', isMoving: false, h: 20, hp: 10, hasGun: false, dir: 1 };
+    const keys = {};
+
+    function setup() {
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        cellSize = canvas.width / width; height = Math.floor(canvas.height / cellSize);
+        grid = Array.from({ length: width }, () => new Array(height).fill(0));
+    }
+
+    function selectChar(c) {
+        player.char = c;
+        document.getElementById('btn-cat').classList.toggle('selected', c === '🐱');
+        document.getElementById('btn-dog').classList.toggle('selected', c === '🐶');
+    }
+
+    function respawnPlayer() {
+        player.hp = 10;
+        player.x = canvas.width / 2;
+        player.y = 50;
+        player.vx = 0;
+        player.vy = 0;
+        player.hasGun = false;
+        document.getElementById('respawn-overlay').style.display = 'none';
+        if(conn) conn.send({type: 'respawn_sync', char: player.char});
+    }
+
+    function startShowdown() {
+        gamePhase = 'countdown';
+        let count = 5;
+        respawnPlayer();
+        if(conn) conn.send({type: 'start_game'});
+        
+        const timer = setInterval(() => {
+            document.getElementById('countdown-timer').innerText = count;
+            count--;
+            if (count < 0) {
+                clearInterval(timer);
+                document.getElementById('countdown-timer').innerText = "FIGHT!";
+                gamePhase = 'battle';
+                spawnGun();
+                setTimeout(() => document.getElementById('countdown-timer').innerText = "", 2000);
+            }
+        }, 1000);
+    }
+
+    function spawnGun() {
+        gunPickup = { x: Math.random() * (canvas.width - 100) + 50, y: 50, active: true };
+        if(conn) conn.send({type: 'spawn_gun', x: gunPickup.x, y: gunPickup.y});
+    }
+
+    function shoot() {
+        if (!player.hasGun || player.hp <= 0) return;
+        const b = { x: player.x + (player.dir * 20), y: player.y + 10, vx: player.dir * 12, owner: 'me' };
+        bullets.push(b);
+        if(conn) conn.send({type: 'shoot', x: b.x, y: b.y, vx: b.vx});
+    }
+
+    peer = new Peer();
+    peer.on('open', id => { myId = id; document.getElementById('my-id-display').innerText = id; });
+    peer.on('connection', c => { conn = c; setupConnHandlers(); });
+
+    function connectToPeer() {
+        const targetId = document.getElementById('peer-id-input').value;
+        conn = peer.connect(targetId);
+        setupConnHandlers();
+    }
+
+    function setupConnHandlers() {
+        document.getElementById('conn-success').style.display = 'block';
+        conn.on('data', d => {
+            if (d.type === 'grid') { if(grid[d.x]) grid[d.x][d.y] = d.v; }
+            if (d.type === 'pos') { Object.assign(partner, d); }
+            if (d.type === 'shoot') { bullets.push({x: d.x, y: d.y, vx: d.vx, owner: 'partner'}); }
+            if (d.type === 'gun_taken') { gunPickup.active = false; partner.hasGun = true; }
+            if (d.type === 'spawn_gun') { gunPickup = {x: d.x, y: d.y, active: true}; }
+            if (d.type === 'hit') { player.hp--; }
+            if (d.type === 'start_game') { startShowdown(); }
+            if (d.type === 'respawn_sync') { partner.hp = 10; partner.hasGun = false; }
+        });
+    }
+
+    window.onkeydown = e => {
+        keys[e.code] = true;
+        if (e.code === 'Space' && player.jumps < 2 && player.hp > 0) { player.vy = -7; player.jumps++; }
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') shoot();
+    };
+    window.onkeyup = e => keys[e.code] = false;
+
+    function update() {
+        let next = grid.map(col => [...col]);
+        for (let x = 0; x < width; x++) {
+            for (let y = height - 1; y >= 0; y--) {
+                let type = grid[x][y]; if (!type) continue;
+                if (colors.lava.includes(type) || colors.fire.includes(type)) {
+                    if (Math.random() < 0.05 && y < height-1 && !grid[x][y+1]) { next[x][y+1] = type; next[x][y] = 0; }
+                } else if (!colors.mountain.includes(type) && y < height - 1 && !grid[x][y+1]) {
+                    next[x][y+1] = type; next[x][y] = 0;
+                }
+            }
+        }
+        grid = next;
+
+        if (player.hp > 0) {
+            if (keys['ArrowLeft'] || keys['KeyA']) { player.vx = -4; player.isMoving = true; player.dir = -1; }
+            else if (keys['ArrowRight'] || keys['KeyD']) { player.vx = 4; player.isMoving = true; player.dir = 1; }
+            else { player.vx *= 0.8; player.isMoving = Math.abs(player.vx) > 0.5; }
+            
+            player.vy += 0.4; player.x += player.vx; player.y += player.vy;
+
+            let gx = Math.floor((player.x + 10) / cellSize);
+            let gy = Math.floor((player.y + player.h) / cellSize);
+            
+            // Lava/Fire Death
+            if (grid[gx] && (colors.lava.includes(grid[gx][gy]) || colors.fire.includes(grid[gx][gy]))) {
+                player.hp = 0;
+            }
+
+            // Void Death
+            if (player.y > canvas.height + 50) {
+                player.hp = 0;
+            }
+
+            if (gx >= 0 && gx < width && gy >= 0 && gy < height && grid[gx][gy]) {
+                player.y = gy * cellSize - player.h; player.vy = 0; player.jumps = 0;
+            }
+        } else {
+            // Show Respawn Button if dead
+            document.getElementById('respawn-overlay').style.display = 'block';
+        }
+
+        if (gunPickup.active) {
+            if (Math.hypot(player.x - gunPickup.x, player.y - gunPickup.y) < 30) {
+                player.hasGun = true; gunPickup.active = false;
+                if(conn) conn.send({type: 'gun_taken'});
+            }
+        }
+
+        bullets.forEach((b, i) => {
+            b.x += b.vx;
+            if (b.owner === 'me' && Math.hypot(b.x - partner.x, b.y - partner.y) < 25 && partner.hp > 0) {
+                bullets.splice(i, 1);
+                if(conn) conn.send({type: 'hit'});
+                partner.hp--;
+            }
+            if (b.x < 0 || b.x > canvas.width) bullets.splice(i, 1);
+        });
+
+        document.getElementById('p1-health').innerText = `${player.char} ${player.hp > 0 ? '❤️x'+player.hp : '💀 KO'}`;
+        document.getElementById('p2-health').innerText = `${partner.char} ${partner.hp > 0 ? '❤️x'+partner.hp : '💀 KO'}`;
+
+        if (conn && conn.open) conn.send({ type: 'pos', x: player.x, y: player.y, char: player.char, isMoving: player.isMoving, h: player.h, hasGun: player.hasGun, hp: player.hp, dir: player.dir });
+    }
+
+    function render() {
+        ctx.fillStyle = '#1e3c72'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) {
+                if (grid[x][y]) {
+                    ctx.fillStyle = grid[x][y];
+                    ctx.fillRect(x*cellSize, y*cellSize, cellSize+1, cellSize+1);
+                }
+            }
+        }
+
+        if (gunPickup.active) { ctx.font = "30px serif"; ctx.fillText("🔫", gunPickup.x, gunPickup.y); }
+
+        const drawChar = (p) => {
+            if (p.hp <= 0) {
+                ctx.font = "40px serif"; ctx.fillText("💀", p.x - 10, p.y + 10);
+                return;
+            }
+            ctx.font = "24px serif";
+            ctx.save();
+            if (p.dir === -1) { ctx.translate(p.x + 20, p.y); ctx.scale(-1, 1); ctx.fillText(p.char, 0, 18); }
+            else { ctx.fillText(p.char, p.x, p.y + 18); }
+            ctx.restore();
+            if (p.hasGun) ctx.fillText("🔫", p.x + (p.dir * 15), p.y + 15);
+        };
+        drawChar(player); drawChar(partner);
+
+        ctx.fillStyle = "yellow";
+        bullets.forEach(b => ctx.fillRect(b.x, b.y, 10, 4));
+
+        update();
+        requestAnimationFrame(render);
+    }
+
+    canvas.onmousedown = canvas.onmousemove = e => {
+        if(e.buttons !== 1) return;
+        let x = Math.floor(e.clientX/cellSize), y = Math.floor(e.clientY/cellSize);
+        if(x>=0 && x<width && y>=0 && y<height) {
+            let val = currentTool === 'dig' ? 0 : colors[currentElement][0];
+            grid[x][y] = val;
+            if(conn) conn.send({type: 'grid', x, y, v: val});
+        }
+    };
+
+    function resetCanvas() { setup(); }
+    function setTool(t) { currentTool = t; document.querySelectorAll('.btn').forEach(b => b.classList.remove('active')); document.getElementById(t+'Btn').classList.add('active'); }
+    function setElement(el) { currentElement = el; setTool('pour'); }
+    function copyMyId() { navigator.clipboard.writeText(myId); }
+    window.onresize = setup;
+    setup(); render();
+</script>
+</body>
+</html>
