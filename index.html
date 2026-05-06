@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nature Studio: Siege</title>
+    <title>Nature Studio: Siege (G-Key Update)</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --ui-bg: rgba(15, 15, 15, 0.9); --ui-border: #333; --accent: #2e7d32; --text: #ccc; }
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #111; color: var(--text); user-select: none; }
         
-        /* Smaller HUD */
         #hud {
             position: absolute; top: 10px; left: 10px; width: 200px;
             background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px;
@@ -28,7 +27,7 @@
         }
         .respawn-btn {
             background: #d32f2f; color: white; border: none; padding: 15px 30px;
-            font-size: 18px; border-radius: 8px; cursor: pointer;
+            font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold;
         }
 
         .section-label { font-size: 9px; text-transform: uppercase; color: #666; margin: 8px 0 4px; display: block; }
@@ -54,32 +53,32 @@
 </div>
 
 <div id="respawn-overlay">
-    <button class="respawn-btn" onclick="respawnPlayer()">RESPAWN</button>
+    <button class="respawn-btn" onclick="respawnPlayer()">PRESS TO RESPAWN</button>
 </div>
 
 <div id="hud">
-    <span class="section-label">ID / Link</span>
+    <span class="section-label">Connection</span>
     <div class="id-container">
         <span id="my-id-display">Generating...</span>
         <button class="copy-btn" onclick="copyMyId()">COPY</button>
     </div>
     <div style="display:flex; gap:3px;">
-        <input type="text" id="peer-id-input" placeholder="Andrey's ID">
+        <input type="text" id="peer-id-input" placeholder="Paste ID">
         <button class="btn" onclick="connectToPeer()">LINK</button>
     </div>
 
-    <span class="section-label">Character</span>
+    <span class="section-label">Pick Character</span>
     <div style="display:flex; gap:5px;">
         <button class="char-btn" id="btn-cat" onclick="selectChar('🐱')">🐱</button>
         <button class="char-btn" id="btn-dog" onclick="selectChar('🐶')">🐶</button>
     </div>
 
-    <span class="section-label">Tools</span>
+    <span class="section-label">Tools (G to SHOOT)</span>
     <div class="grid-3" style="grid-template-columns: 1fr 1fr;">
         <button id="pourBtn" class="btn active" onclick="setTool('pour')">POUR</button>
         <button id="digBtn" class="btn" onclick="setTool('dig')">DIG</button>
     </div>
-    <button class="btn" style="width:100%; margin-top:5px; background:#822;" onclick="startShowdown()">FIGHT</button>
+    <button class="btn" style="width:100%; margin-top:5px; background:#822;" onclick="startShowdown()">BATTLE START</button>
 
     <span class="section-label">Elements</span>
     <div class="grid-3">
@@ -90,7 +89,7 @@
         <button class="btn" onclick="setElement('fire')">Fire</button>
         <button class="btn" onclick="setElement('water')">Water</button>
     </div>
-    <button class="btn" style="width:100%; margin-top:10px; opacity:0.5;" onclick="resetCanvas()">Clear All</button>
+    <button class="btn" style="width:100%; margin-top:10px; opacity:0.5;" onclick="resetCanvas()">Purge World</button>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -181,12 +180,12 @@
     window.onkeydown = e => { 
         keys[e.code] = true; 
         if (e.code === 'Space' && player.jumps < 2 && player.hp > 0) { player.vy = -8; player.jumps++; }
-        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') shoot();
+        // NEW CONTROL: G key to shoot
+        if (e.code === 'KeyG') shoot();
     };
     window.onkeyup = e => keys[e.code] = false;
 
     function update() {
-        // Falling Sand Logic
         for (let x = 0; x < width; x++) {
             for (let y = height - 2; y >= 0; y--) {
                 let type = grid[x][y]; if (!type || colors.mountain.includes(type)) continue;
@@ -215,7 +214,6 @@
             b.x += b.vx;
             let bgx = Math.floor(b.x / cellSize), bgy = Math.floor(b.y / cellSize);
             
-            // Siege Mechanic: Chip away solid elements
             if (grid[bgx] && grid[bgx][bgy]) {
                 grid[bgx][bgy] = 0; 
                 if(conn) conn.send({type: 'chip', x: bgx, y: bgy});
