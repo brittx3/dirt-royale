@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nature Studio: Siege (G-Key Update)</title>
+    <title>Nature Studio: Siege (R-Respawn & Safety Plate)</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --ui-bg: rgba(15, 15, 15, 0.9); --ui-border: #333; --accent: #2e7d32; --text: #ccc; }
@@ -23,12 +23,14 @@
 
         #respawn-overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 200; display: none;
+            z-index: 200; display: none; text-align: center;
         }
         .respawn-btn {
             background: #d32f2f; color: white; border: none; padding: 15px 30px;
             font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 0 15px rgba(211, 47, 47, 0.4);
         }
+        .respawn-hint { display: block; margin-top: 10px; font-size: 12px; color: #888; }
 
         .section-label { font-size: 9px; text-transform: uppercase; color: #666; margin: 8px 0 4px; display: block; }
         .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
@@ -53,7 +55,8 @@
 </div>
 
 <div id="respawn-overlay">
-    <button class="respawn-btn" onclick="respawnPlayer()">PRESS TO RESPAWN</button>
+    <button class="respawn-btn" onclick="respawnPlayer()">RESPAWN</button>
+    <span class="respawn-hint">Or press 'R'</span>
 </div>
 
 <div id="hud">
@@ -63,22 +66,23 @@
         <button class="copy-btn" onclick="copyMyId()">COPY</button>
     </div>
     <div style="display:flex; gap:3px;">
-        <input type="text" id="peer-id-input" placeholder="Paste ID">
+        <input type="text" id="peer-id-input" placeholder="Andrey's ID">
         <button class="btn" onclick="connectToPeer()">LINK</button>
     </div>
 
-    <span class="section-label">Pick Character</span>
+    <span class="section-label">Character</span>
     <div style="display:flex; gap:5px;">
         <button class="char-btn" id="btn-cat" onclick="selectChar('🐱')">🐱</button>
         <button class="char-btn" id="btn-dog" onclick="selectChar('🐶')">🐶</button>
     </div>
 
-    <span class="section-label">Tools (G to SHOOT)</span>
+    <span class="section-label">Controls</span>
+    <div style="font-size: 9px; color: #888; margin-bottom: 5px;">G: Shoot | R: Respawn | Space: Jump</div>
     <div class="grid-3" style="grid-template-columns: 1fr 1fr;">
         <button id="pourBtn" class="btn active" onclick="setTool('pour')">POUR</button>
         <button id="digBtn" class="btn" onclick="setTool('dig')">DIG</button>
     </div>
-    <button class="btn" style="width:100%; margin-top:5px; background:#822;" onclick="startShowdown()">BATTLE START</button>
+    <button class="btn" style="width:100%; margin-top:5px; background:#822;" onclick="startShowdown()">FIGHT</button>
 
     <span class="section-label">Elements</span>
     <div class="grid-3">
@@ -120,11 +124,28 @@
         if(conn) conn.send({type: 'char_sync', char: c});
     }
 
+    function createSafetyPlatform(px, py) {
+        let gx = Math.floor(px / cellSize);
+        let gy = Math.floor((py + 22) / cellSize);
+        for(let i = -2; i <= 2; i++) {
+            if(grid[gx+i] && gy < height) {
+                grid[gx+i][gy] = colors.mountain[0];
+                if(conn) conn.send({type: 'grid', x: gx+i, y: gy, v: colors.mountain[0]});
+            }
+        }
+    }
+
     function respawnPlayer() {
-        player.hp = 10; player.x = Math.random() * (canvas.width - 100) + 50; player.y = 50;
+        player.hp = 10; 
+        player.x = Math.random() * (canvas.width - 200) + 100; 
+        player.y = 100;
         player.vx = 0; player.vy = 0; player.hasGun = false;
+        
+        // Spawn stone platform so we don't fall forever
+        createSafetyPlatform(player.x, player.y);
+        
         document.getElementById('respawn-overlay').style.display = 'none';
-        if(conn) conn.send({type: 'respawn_sync', char: player.char});
+        if(conn) conn.send({type: 'respawn_sync', char: player.char, x: player.x, y: player.y});
     }
 
     function startShowdown() {
@@ -171,7 +192,10 @@
             if (d.type === 'spawn_gun') gunPickup = {x: d.x, y: d.y, active: true};
             if (d.type === 'hit') player.hp--;
             if (d.type === 'start_game') startShowdown();
-            if (d.type === 'respawn_sync') { partner.hp = 10; partner.hasGun = false; partner.char = d.char; }
+            if (d.type === 'respawn_sync') { 
+                partner.hp = 10; partner.hasGun = false; partner.char = d.char;
+                createSafetyPlatform(d.x, d.y); // Sync the platform spawn
+            }
             if (d.type === 'char_sync') partner.char = d.char;
             if (d.type === 'chip') { if(grid[d.x]) grid[d.x][d.y] = 0; }
         });
@@ -180,8 +204,9 @@
     window.onkeydown = e => { 
         keys[e.code] = true; 
         if (e.code === 'Space' && player.jumps < 2 && player.hp > 0) { player.vy = -8; player.jumps++; }
-        // NEW CONTROL: G key to shoot
         if (e.code === 'KeyG') shoot();
+        // NEW CONTROL: R key to respawn
+        if (e.code === 'KeyR' && player.hp <= 0) respawnPlayer();
     };
     window.onkeyup = e => keys[e.code] = false;
 
@@ -213,14 +238,10 @@
         bullets.forEach((b, i) => {
             b.x += b.vx;
             let bgx = Math.floor(b.x / cellSize), bgy = Math.floor(b.y / cellSize);
-            
             if (grid[bgx] && grid[bgx][bgy]) {
-                grid[bgx][bgy] = 0; 
-                if(conn) conn.send({type: 'chip', x: bgx, y: bgy});
-                bullets.splice(i, 1);
-                return;
+                grid[bgx][bgy] = 0; if(conn) conn.send({type: 'chip', x: bgx, y: bgy});
+                bullets.splice(i, 1); return;
             }
-
             if (b.owner === 'me' && Math.hypot(b.x - partner.x, b.y - partner.y) < 25 && partner.hp > 0) {
                 bullets.splice(i, 1); if(conn) conn.send({type: 'hit'}); partner.hp--;
             }
@@ -245,11 +266,9 @@
             }
         }
         if (gunPickup.active) { ctx.font = "24px serif"; ctx.fillText("🔫", gunPickup.x, gunPickup.y); }
-
         const draw = (p) => {
             if (p.hp <= 0) { ctx.font = "30px serif"; ctx.fillText("💀", p.x, p.y + 10); return; }
-            ctx.font = "20px serif";
-            ctx.save();
+            ctx.font = "20px serif"; ctx.save();
             if (p.dir === -1) { ctx.translate(p.x + 20, p.y); ctx.scale(-1, 1); ctx.fillText(p.char, 0, 18); }
             else ctx.fillText(p.char, p.x, p.y + 18);
             ctx.restore();
@@ -268,7 +287,6 @@
             grid[x][y] = val; if(conn) conn.send({type: 'grid', x, y, v: val});
         }
     };
-
     function resetCanvas() { setup(); }
     function setTool(t) { currentTool = t; document.getElementById('pourBtn').className = t==='pour'?'btn active':'btn'; document.getElementById('digBtn').className = t==='dig'?'btn active':'btn'; }
     function setElement(el) { currentElement = el; setTool('pour'); }
